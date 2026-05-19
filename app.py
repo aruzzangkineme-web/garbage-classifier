@@ -1,4 +1,5 @@
 import os
+import gdown
 import numpy as np
 import streamlit as st
 import tensorflow as tf
@@ -100,15 +101,24 @@ CLASS_EMOJI = {
     'trash':     '🗑️',
 }
 
-# ── Model paths (update these to match your Google Drive paths) ────────────────
-CUSTOM_CNN_PATH  = "/content/drive/MyDrive/custom_cnn_garbage.keras"
-INCEPTIONV3_PATH = "/content/drive/MyDrive/inceptionv3_garbage.keras"
+# ── Google Drive file IDs ──────────────────────────────────────────────────────
+CUSTOM_CNN_ID   = "1t0oLdi1HDuBjgxYGnRPCrOnW6udDzK0z"
+INCEPTIONV3_ID  = "1SDEUoHW-WiWK7cUkJHs1uMDabLChArz6"
+
+CUSTOM_CNN_PATH  = "custom_cnn_garbage.keras"
+INCEPTIONV3_PATH = "inceptionv3_garbage.keras"
+
+# ── Download model from Google Drive if not already cached ────────────────────
+def download_model(file_id: str, output_path: str):
+    if not os.path.exists(output_path):
+        url = f"https://drive.google.com/uc?id={file_id}"
+        with st.spinner(f"Downloading {output_path}… (first launch only)"):
+            gdown.download(url, output_path, quiet=False)
 
 # ── Model loader (cached — loads only once per session) ───────────────────────
 @st.cache_resource(show_spinner="Loading model weights…")
-def load_model(path: str):
-    if not os.path.exists(path):
-        return None
+def load_model(file_id: str, path: str):
+    download_model(file_id, path)
     return tf.keras.models.load_model(path)
 
 # ── Preprocessing (must match training: rescale=1/255, size=224) ──────────────
@@ -139,19 +149,10 @@ model_choice = st.radio(
     help="Custom CNN is trained from scratch. InceptionV3 uses ImageNet transfer learning.",
 )
 
-model_path = CUSTOM_CNN_PATH if model_choice == "Custom CNN" else INCEPTIONV3_PATH
-model = load_model(model_path)
-
-if model is None:
-    st.warning(
-        f"⚠️ Model file not found at `{model_path}`.\n\n"
-        "Make sure you have saved the model from your training notebook:\n"
-        "```python\n"
-        "model_build_custom_cnn.save('/content/drive/MyDrive/custom_cnn_garbage.keras')\n"
-        "model_build_inceptionv3.save('/content/drive/MyDrive/inceptionv3_garbage.keras')\n"
-        "```"
-    )
-    st.stop()
+if model_choice == "Custom CNN":
+    model = load_model(CUSTOM_CNN_ID, CUSTOM_CNN_PATH)
+else:
+    model = load_model(INCEPTIONV3_ID, INCEPTIONV3_PATH)
 
 st.success(f"✅ **{model_choice}** loaded — {model.count_params():,} parameters")
 
@@ -175,7 +176,7 @@ if uploaded is not None:
     with col2:
         with st.spinner("Classifying…"):
             arr   = preprocess(image)
-            preds = model.predict(arr, verbose=0)[0]   # shape: (6,)
+            preds = model.predict(arr, verbose=0)[0]
 
         pred_idx   = int(np.argmax(preds))
         pred_class = CLASSES[pred_idx]
